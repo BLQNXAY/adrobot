@@ -15,6 +15,7 @@ login_url = 'http://www.5iads.cn/module/user/login.asp'
 sgin_url = 'http://www.5iads.cn/module/user/Signin.asp'
 ad_url = 'http://www.5iads.cn/module/dianji/'
 surf_url = 'http://www.5iads.cn/module/surf/'
+withdraw_url = 'http://www.5iads.cn/tixian.asp?agree=1'
 
 session = Session()
 session.headers = {
@@ -132,10 +133,24 @@ def finish_surf(surf_info):
 	response = session.post(surf_url, data=data)
 	print(response.text)
 
-for _ in range(10):
-	surf_info = start_surf()
-	wait_surf()
-	finish_surf(surf_info)
+# 提现
+def withdraw():
+    url = 'http://www.5iads.cn/tixian.asp?agree=1'
+    data = {
+            'amount': '18269874870',
+            'tbuserpwd': '2000',
+            'act': 'tixian'
+    }
+    form_action = 'http://www.5iads.cn/module/user/tixian.asp'
+    response = session.post(form_action, data=data)
+    print(response.text)
 
+
+# for _ in range(10):
+	# surf_info = start_surf()
+	# wait_surf()
+        # finish_surf(surf_info)
+
+withdraw()
 
 session.close()
