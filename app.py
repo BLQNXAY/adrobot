@@ -1,156 +1,180 @@
 import os
+import sys
 import time
 import random
 from datetime import datetime
 from dotenv import find_dotenv, load_dotenv
 from requests import Session
 
-load_dotenv(find_dotenv())
+class Adrobot:
+    code_url = 'http://www.5iads.cn/module/user/code.asp'
+    login_url = 'http://www.5iads.cn/module/user/login.asp'
+    sgin_url = 'http://www.5iads.cn/module/user/Signin.asp'
+    ad_url = 'http://www.5iads.cn/module/dianji/'
+    surf_url = 'http://www.5iads.cn/module/surf/'
+    check_url = 'http://www.5iads.cn/module/' 
+    withdraw_url = 'http://www.5iads.cn/module/user/tixian.asp'
 
-username = os.environ.get('username')
-password = os.environ.get('password')
+    def __init__(self):
+        load_dotenv(find_dotenv())
+        self.username = os.environ.get('username')
+        self.password = os.environ.get('password')
 
-code_url = 'http://www.5iads.cn/module/user/code.asp'
-login_url = 'http://www.5iads.cn/module/user/login.asp'
-sgin_url = 'http://www.5iads.cn/module/user/Signin.asp'
-ad_url = 'http://www.5iads.cn/module/dianji/'
-surf_url = 'http://www.5iads.cn/module/surf/'
-withdraw_url = 'http://www.5iads.cn/tixian.asp?agree=1'
+        self.session = Session()
+        self.session.headers = {
+            'Accept': 'application/json, text/javascript, */*; q=0.01',
+            'Accept-Encoding': 'gzip, deflate',
+            'Accept-Language': 'zh-CN,zh;q=0.9',
+            'Connection': 'keep-alive',
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+            'Host': 'www.5iads.cn',
+            'Origin': 'http://www.5iads.cn',
+            'Referer': 'http://www.5iads.cn/',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36',
+            'X-Requested-With': 'XMLHttpRequest'
+    }
 
-session = Session()
-session.headers = {
-	'Accept': 'application/json, text/javascript, */*; q=0.01',
-	'Accept-Encoding': 'gzip, deflate',
-	'Accept-Language': 'zh-CN,zh;q=0.9',
-	'Connection': 'keep-alive',
-	'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-	'Host': 'www.5iads.cn',
-	'Origin': 'http://www.5iads.cn',
-	'Referer': 'http://www.5iads.cn/',
-	'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36',
-	'X-Requested-With': 'XMLHttpRequest'
-}
+    def __del__(self):
+        self.session.close()
 
-# 更新验证码
-for _ in range(7):
-	response = session.get(code_url)
-	if response.text == 'http://www.5iads.cn/yzmfile/7.jpg|/t.asp?id=7|success':
-		break
+    def _refresh_code(self):
+        for _ in range(30):
+            response = self.session.get(self.code_url)
+            if response.text == 'http://www.5iads.cn/yzmfile/7.jpg|/t.asp?id=7|success':
+                return True
+        return False
 
-# 登录
-user_data = {
-	'action': 'loginsys',
-	'Username': username,
-	'Password': password,
-	'checkcode': '50'
-}
-response = session.post(login_url, data=user_data)
+    def login(self):
+        if self._refresh_code():
+            login_data = {
+                'action': 'loginsys',
+                'Username': self.username,
+                'Password': self.password,
+                'checkcode': '50'
+            }
+            response = self.session.post(self.login_url, data=login_data)
+            return response
+        else:
+            print('Default login')
+            sys.exit()
 
-# 签到
-response = session.get(sgin_url, params=dict(action='signin'))
+    def sgin(self):
+        response = self.session.get(self.sgin_url, params=dict(action='signin'))
+        return response
 
-# 获取广告列表
-data = {
-	'action': 'loadDianjiList',
-	'row': '20',
-	'pagenum': '1'
-}
-response = session.post(ad_url, data=data)
-ad_list = [ad['id'] for ad in response.json()]
-print(ad_list)
+    def _get_ads(self):
+        ads_data = {
+            'action': 'loadDianjiList',
+            'row': '20',
+            'pagenum': '1'
+        }
+        response = self.session.post(self.ad_url, data=ads_data)
+        ads = [ad['id'] for ad in response.json()]
+        return ads
 
-# 点击广告
-def click_ad(ad_id):
-	data ={
-		'Isjiami': 'false',
-		'clickid': ad_id,
-		'action': 'Show_dianji_getone',
+    def _click_ad(self, ad_id):
+        ad_data ={
+            'Isjiami': 'false',
+            'clickid': ad_id,
+            'action': 'Show_dianji_getone',
+        }
+        response = self.session.post(self.ad_url, data=ad_data)
+        return response.json()
+
+    @staticmethod
+    def _wait_ad(ad_info):
+        time.sleep(7 + ad_info.get('miao', 20))
+
+    def _finish_ad(self, ad_info):
+        finish_data = {
+            'action': ad_info['action'],
+            'firstCk': 2,
+            'YzmCheck': 'success',
+            'clickid': ad_info['id'],
+            'refurl': 'http://www.5iads.cn/reclick.asp?gourl=http://www.5iads.cn/zhuan.asp?zhuan=dianji',
+            'sign': ad_info['sign'],
+            'Isjiami': True,
+            'key': random.random()
+        }
+        response = self.session.post(ad_url, data=finish_data)
+        return response.text
+
+    def browse(self):
+        ads = self._get_ads()
+        for ad in ads:
+            ad_info = self._click_ad(ad)
+            self._wait_ad(ad_info)
+            self._finish_ad(ad_info)
+    
+    def _start_surf(self):
+        start_surf_data = {
+            'des': 'start',
+            'type': 1,
+            'manual': 0,
+            'info': 'window_1',
+            'timeB': int(datetime.now().timestamp()),
+            'timeE': int(datetime.now().timestamp()),
 	}
-	response = session.post(ad_url, data=data)
-	return response.json()
+        response = self.session.post(self.surf_url, data=start_surf_data)
+        surf_info = response.json()
+        return surf_info
 
-# 等待广告计时
-def wait_ad(ad_info):
-	time.sleep(7 + ad_info.get('miao', 20))
+    @staticmethod
+    def _wait_surf(interval=20):
+        time.sleep(interval)
 
-# 完成广告
-def finish_ad(ad_info):
-	data = {
-		'action': ad_info['action'],
-		'firstCk': 2,
-		'YzmCheck': 'success',
-		'clickid': ad_info['id'],
-		'refurl': 'http://www.5iads.cn/reclick.asp?gourl=http://www.5iads.cn/zhuan.asp?zhuan=dianji',
-		'sign': ad_info['sign'],
-		'Isjiami': True,
-		'key': random.random()
+    def _finish_surf(self, surf_info):
+        finish_surf_data = {
+            'des': 'complete',
+            'type': 1,
+            'manual': 0,
+            'info': 'window_1',
+            'sign': surf_info['sign'],
+            'timeB': int(datetime.now().timestamp()),
+            'timeE': int(datetime.now().timestamp()),
+            'id': surf_info['id'],
 	}
-	response = session.post(ad_url, data=data)
-	print(response.text)
+        response = self.session.post(self.surf_url, data=finish_surf_data)
+        return response
 
-for ad in ad_list:
-	ad_info = click_ad(ad)
-	wait_ad(ad_info)
-	finish_ad(ad_info)
+    def surf(self):
+        surf_info = self._start_surf()
+        self._wait_surf()
+        response = self._finish_surf(surf_info)
+        return response
 
-# 广告冲浪开始
-def start_surf():
-	data = {
-		'des': 'start',
-		'type': 1,
-		'manual': 0,
-		'info': 'window_1',
-		'timeB': None,
-		'timeE': None,
-	}
-	time_now = int(datetime.now().timestamp())
-	data['timeB'] = time_now
-	data['timeE'] = time_now
-	response = session.post(surf_url, data=data)
-	print(response.text)
-	surf_info = response.json()
-	return surf_info
-# 等待广告
-def wait_surf():
-	time.sleep(20)
-# 广告冲浪结束
-def finish_surf(surf_info):
-	data = {
-		'des': 'complete',
-		'type': 1,
-		'manual': 0,
-		'info': 'window_1',
-		'sign': None,
-		'timeB': None,
-		'timeE': None,
-		'id': None,
-	}
-	time_now = int(datetime.now().timestamp())
-	data['timeB'] = time_now
-	data['timeE'] = time_now
-	data['sign'] = surf_info['sign']
-	data['id'] = surf_info['id']
-	response = session.post(surf_url, data=data)
-	print(response.text)
+    def _check_user(self):
+        response = self.session.post(self.check_url, data=dict(action='CheckUserLogin'))
+        return response
 
-# 提现
-def withdraw():
-    url = 'http://www.5iads.cn/tixian.asp?agree=1'
-    data = {
+    def _finish_check(self):
+        response = self.session.post(self.check_url, data=dict(action='taskfinish'))
+        return response
+
+    def _start_withdraw(self):
+        withdraw_data = {
             'amount': '18269874870',
             'tbuserpwd': '2000',
             'act': 'tixian'
-    }
-    form_action = 'http://www.5iads.cn/module/user/tixian.asp'
-    response = session.post(form_action, data=data)
-    print(response.text)
+        }
+        response = self.session.post(self.withdraw_url, data=withdraw_data)
+        return response
 
+    def withdraw(self):
+        self._check_user()
+        self._finish_check()
+        response = self._start_withdraw()
+        return response
 
-# for _ in range(10):
-	# surf_info = start_surf()
-	# wait_surf()
-        # finish_surf(surf_info)
+    def run(self):
+        self.login()
+        self.sgin()
+        self.browse()
+        self.withdraw()
 
-withdraw()
+def main():
+    adrobot = Adrobot()
+    adrobot.run()
 
-session.close()
+if __name__ == '__main__':
+    main()
