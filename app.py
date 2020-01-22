@@ -24,7 +24,7 @@ class Adrobot:
         self.session.headers = {
             'Accept': 'application/json, text/javascript, */*; q=0.01',
             'Accept-Encoding': 'gzip, deflate',
-            'Accept-Language': 'zh-CN,zh;q=0.9',
+            'Accept-Language': 'zh-CN,zh;',
             'Connection': 'keep-alive',
             'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
             'Host': 'www.5iads.cn',
@@ -143,6 +143,10 @@ class Adrobot:
         response = self._finish_surf(surf_info)
         return response
 
+    def _withdraw_headers(self):
+        self.session.headers['Referer'] = 'http://www.5iads.cn/tixian.asp?agree=1'
+        return self.session.headers
+
     def _check_user(self):
         response = self.session.post(self.check_url, data=dict(action='CheckUserLogin'))
         return response
@@ -153,18 +157,20 @@ class Adrobot:
 
     def _start_withdraw(self):
         withdraw_data = {
-            'amount': '18269874870',
-            'tbuserpwd': '2000',
+            'amount': '2000',
+            'tbuserpwd': '18269874870',
             'act': 'tixian'
         }
         response = self.session.post(self.withdraw_url, data=withdraw_data)
         return response
 
     def withdraw(self):
-        self._check_user()
-        self._finish_check()
-        response = self._start_withdraw()
-        return response
+        if datetime.now().weekday() == 1:
+            self._withdraw_headers()
+            self._check_user()
+            self._finish_check()
+            response = self._start_withdraw()
+            return response
 
     def run(self):
         self.login()
