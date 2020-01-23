@@ -19,6 +19,7 @@ class Adrobot:
         load_dotenv(find_dotenv())
         self.username = os.environ.get('username')
         self.password = os.environ.get('password')
+        self.phonenum = os.environ.get('phonenum')
 
         self.session = Session()
         self.session.headers = {
@@ -96,7 +97,7 @@ class Adrobot:
             'Isjiami': True,
             'key': random.random()
         }
-        response = self.session.post(ad_url, data=finish_data)
+        response = self.session.post(self.ad_url, data=finish_data)
         return response.text
 
     def browse(self):
@@ -129,19 +130,20 @@ class Adrobot:
             'type': 1,
             'manual': 0,
             'info': 'window_1',
-            'sign': surf_info['sign'],
+            'sign': surf_info.get('sign'),
             'timeB': int(datetime.now().timestamp()),
             'timeE': int(datetime.now().timestamp()),
-            'id': surf_info['id'],
+            'id': surf_info.get('id'),
 	}
         response = self.session.post(self.surf_url, data=finish_surf_data)
         return response
 
     def surf(self):
-        surf_info = self._start_surf()
-        self._wait_surf()
-        response = self._finish_surf(surf_info)
-        return response
+        if datetime.now().hour > 22:
+            surf_info = self._start_surf()
+            self._wait_surf()
+            response = self._finish_surf(surf_info)
+            return response
 
     def _withdraw_headers(self):
         self.session.headers['Referer'] = 'http://www.5iads.cn/tixian.asp?agree=1'
@@ -155,17 +157,17 @@ class Adrobot:
         response = self.session.post(self.check_url, data=dict(action='taskfinish'))
         return response
 
-    def _start_withdraw(self):
+    def _start_withdraw(self, rmb=1):
         withdraw_data = {
-            'amount': '2000',
-            'tbuserpwd': '18269874870',
+            'amount': str(2000 * round(abs(int(rmb)))),
+            'tbuserpwd': self.phonenum,
             'act': 'tixian'
         }
         response = self.session.post(self.withdraw_url, data=withdraw_data)
         return response
 
-    def withdraw(self):
-        if datetime.now().weekday() == 1:
+    def withdraw(self, weekday=1):
+        if datetime.now().weekday() == weekday:
             self._withdraw_headers()
             self._check_user()
             self._finish_check()
@@ -176,6 +178,7 @@ class Adrobot:
         self.login()
         self.sgin()
         self.browse()
+        self.surf()
         self.withdraw()
 
 def main():
