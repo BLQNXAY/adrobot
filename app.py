@@ -1,189 +1,162 @@
 import os
-import sys
 import time
-import random
+import hashlib
+import functools
 from datetime import datetime
-from dotenv import find_dotenv, load_dotenv
-from requests import Session
+from dotenv import load_dotenv
+from requests_html import HTMLSession
 
 class Adrobot:
-    code_url = 'http://www.5iads.cn/module/user/code.asp'
-    login_url = 'http://www.5iads.cn/module/user/login.asp'
-    sgin_url = 'http://www.5iads.cn/module/user/Signin.asp'
-    ad_url = 'http://www.5iads.cn/module/dianji/'
-    surf_url = 'http://www.5iads.cn/module/surf/'
-    check_url = 'http://www.5iads.cn/module/' 
-    withdraw_url = 'http://www.5iads.cn/module/user/tixian.asp'
+	login_url = 'http://wx.m.5iads.cn/module/login.asp'
+	signin_url = 'http://wx.m.5iads.cn/module/signin.asp'
+	browser_url = 'http://wx.m.5iads.cn/module/browser.asp'
+	withdraw_url = 'http://wx.m.5iads.cn/module/tixian.asp'
 
-    def __init__(self):
-        load_dotenv(find_dotenv())
-        self.username = os.environ.get('username')
-        self.password = os.environ.get('password')
-        self.phonenum = os.environ.get('phonenum')
+	referer_urls = dict(
+		login_referer = 'http://wx.m.5iads.cn/login.html',
+		signin_referer = 'http://wx.m.5iads.cn/Signin.html?t=',
+		browser_referer = 'http://wx.m.5iads.cn/browser_wx.html?t=',
+		withdraw_referer = 'http://wx.m.5iads.cn/tixian.html?t='
+	)
 
-        self.session = Session()
-        self.session.headers = {
-            'Accept': 'application/json, text/javascript, */*; q=0.01',
-            'Accept-Encoding': 'gzip, deflate',
-            'Accept-Language': 'zh-CN,zh;',
-            'Connection': 'keep-alive',
-            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-            'Host': 'www.5iads.cn',
-            'Origin': 'http://www.5iads.cn',
-            'Referer': 'http://www.5iads.cn/',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36',
-            'X-Requested-With': 'XMLHttpRequest'
-    }
+	debug = False
 
-    def __del__(self):
-        self.session.close()
+	def __init__(self):
+		dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
+		load_dotenv(verbose=True, dotenv_path=dotenv_path)
+		self.username = os.getenv("adrobot_username")
+		self.password = os.getenv("adrobot_password")
+		self.phonenum = os.getenv("adrobot_phonenum")
+		self.withdraw_amount = os.getenv("withdraw_amount")
+		self.withdraw_weekday = os.getenv("withdraw_weekday")
 
-    def _refresh_code(self):
-        for _ in range(30):
-            response = self.session.get(self.code_url)
-            if response.text == 'http://www.5iads.cn/yzmfile/7.jpg|/t.asp?id=7|success':
-                return True
-        return False
+		self.data = dict()
 
-    def login(self):
-        if self._refresh_code():
-            login_data = {
-                'action': 'loginsys',
-                'Username': self.username,
-                'Password': self.password,
-                'checkcode': '50'
-            }
-            response = self.session.post(self.login_url, data=login_data)
-            return response
-        else:
-            print('Default login')
-            sys.exit()
+		self.session = HTMLSession()
+		self.session.headers = {
+			'Accept': 'text/html,application/json,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
+			'Accept-Encoding': 'gzip, deflate',
+			'Accept-Language': 'zh-CN,zh;q=0.9',
+			'Connection': 'keep-alive',
+			'Content-Type': 'application/x-www-form-urlencoded',
+			'Host': 'wx.m.5iads.cn',
+			'Origin': 'http://wx.m.5iads.cn',
+			'Referer': 'http://wx.m.5iads.cn/',
+			'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.122 Safari/537.36',
+			'X-Requested-With': 'XMLHttpRequest'
+		}
 
-    def sgin(self):
-        response = self.session.get(self.sgin_url, params=dict(action='signin'))
-        return response
+	def __del__(self):
+		self.session.close()
 
-    def _get_ads(self):
-        ads_data = {
-            'action': 'loadDianjiList',
-            'row': '20',
-            'pagenum': '1'
-        }
-        response = self.session.post(self.ad_url, data=ads_data)
-        ads = [ad['id'] for ad in response.json()]
-        return ads
+	@property
+	def password(self):
+		return self._password
 
-    def _click_ad(self, ad_id):
-        ad_data ={
-            'Isjiami': 'false',
-            'clickid': ad_id,
-            'action': 'Show_dianji_getone',
-        }
-        response = self.session.post(self.ad_url, data=ad_data)
-        return response.json()
+	@password.setter
+	def password(self, value):
+		md5 = hashlib.md5()
+		md5.update(value.encode(encoding='utf-8'))
+		self._password = md5.hexdigest()
 
-    @staticmethod
-    def _wait_ad(ad_info):
-        time.sleep(7 + ad_info.get('miao', 20))
+	def change_referer(with_timestamp=True):
+		def decorator(func):
+			@functools.wraps(func)
+			def wrapper(self, *args, **kw):
+				if with_timestamp:
+					timestamp = int(datetime.now().timestamp())
+				else:
+					timestamp = ''
+				referer_url = self.referer_urls[func.__name__.split('_')[0] + '_referer'] + str(timestamp)
+				self.session.headers['Referer'] = referer_url
+				self.data.clear()
+				self.data.update(gotourl=referer_url,)
+				return func(self, *args, **kw)
+			return wrapper
+		return decorator
 
-    def _finish_ad(self, ad_info):
-        finish_data = {
-            'action': ad_info['action'],
-            'firstCk': 2,
-            'YzmCheck': 'success',
-            'clickid': ad_info['id'],
-            'refurl': 'http://www.5iads.cn/reclick.asp?gourl=http://www.5iads.cn/zhuan.asp?zhuan=dianji',
-            'sign': ad_info['sign'],
-            'Isjiami': True,
-            'key': random.random()
-        }
-        response = self.session.post(self.ad_url, data=finish_data)
-        return response.text
+	@change_referer(with_timestamp=False)
+	def login(self):
+		self.data.update(
+			action='loginsys',
+			username=self.username,
+			password=self.password,
+		)
+		response = self.session.post(self.login_url, data=self.data)
+		if self.debug: print(response.text)
+		return response
 
-    def browse(self):
-        ads = self._get_ads()
-        for ad in ads:
-            ad_info = self._click_ad(ad)
-            self._wait_ad(ad_info)
-            self._finish_ad(ad_info)
-    
-    def _start_surf(self):
-        start_surf_data = {
-            'des': 'start',
-            'type': 1,
-            'manual': 0,
-            'info': 'window_1',
-            'timeB': int(datetime.now().timestamp()),
-            'timeE': int(datetime.now().timestamp()),
-	}
-        response = self.session.post(self.surf_url, data=start_surf_data)
-        surf_info = response.json()
-        return surf_info
+	@change_referer()
+	def signin(self):
+		self.data.update(action='signin')
+		response = self.session.post(self.signin_url, data=self.data)
+		if self.debug: print(response.text)
+		return response
+	
+	@change_referer()
+	def browser_get_ads(self):
+		self.data.update(
+			action='loadDianjiList',
+			page = 1,
+			beginTime = '',
+			endTime = '',
+			)
+		response = self.session.post(self.browser_url, data=self.data)
+		ads = filter(None, response.json().get('rows'))
+		return ads
 
-    @staticmethod
-    def _wait_surf(interval=20):
-        time.sleep(interval)
+	@change_referer()
+	def browser_click_ad(self, ad):
+		self.data.update(
+			action='Show_dianji_getone',
+			clickid = ad['id'],
+			)
+		response = self.session.post(self.browser_url, data=self.data)
+		finish_info = response.json()
+		time.sleep(ad.get('miao', 20) + 7)
+		return finish_info
 
-    def _finish_surf(self, surf_info):
-        finish_surf_data = {
-            'des': 'complete',
-            'type': 1,
-            'manual': 0,
-            'info': 'window_1',
-            'sign': surf_info.get('sign'),
-            'timeB': int(datetime.now().timestamp()),
-            'timeE': int(datetime.now().timestamp()),
-            'id': surf_info.get('id'),
-	}
-        response = self.session.post(self.surf_url, data=finish_surf_data)
-        return response
+	@change_referer()
+	def browser_finish_ad(self, finish_info):
+		self.data.update(
+			action='BrowserJiangli',
+			clickid = finish_info['id'],
+			sign = finish_info['sign'],
+			endTime = '',
+			)
+		response = self.session.post(self.browser_url, data=self.data)
+		if self.debug: print(response.text)
+		return response
 
-    def surf(self):
-        if datetime.now().hour > 22:
-            surf_info = self._start_surf()
-            self._wait_surf()
-            response = self._finish_surf(surf_info)
-            return response
+	def browser(self):
+		ads = self.browser_get_ads()
+		for ad in ads:
+			finish_info = self.browser_click_ad(ad)
+			self.browser_finish_ad(finish_info)
+		return ads
 
-    def _withdraw_headers(self):
-        self.session.headers['Referer'] = 'http://www.5iads.cn/tixian.asp?agree=1'
-        return self.session.headers
+	@change_referer()
+	def withdraw(self):
+		if str(datetime.now().weekday()) == self.withdraw_weekday:
+			self.data.update(
+				action='TiXianToUserAlipay',
+				amount = self.withdraw_amount,
+				phone = self.phonenum,
+				paytype = 'ALIPAY',
+			)
+			response = self.session.post(self.withdraw_url, data=self.data)
+			return response
 
-    def _check_user(self):
-        response = self.session.post(self.check_url, data=dict(action='CheckUserLogin'))
-        return response
-
-    def _finish_check(self):
-        response = self.session.post(self.check_url, data=dict(action='taskfinish'))
-        return response
-
-    def _start_withdraw(self, rmb=1):
-        withdraw_data = {
-            'amount': str(2000 * round(abs(int(rmb)))),
-            'tbuserpwd': self.phonenum,
-            'act': 'tixian'
-        }
-        response = self.session.post(self.withdraw_url, data=withdraw_data)
-        return response
-
-    def withdraw(self, weekday=1):
-        if datetime.now().weekday() == weekday:
-            self._withdraw_headers()
-            self._check_user()
-            self._finish_check()
-            response = self._start_withdraw()
-            return response
-
-    def run(self):
-        self.login()
-        self.sgin()
-        self.browse()
-        self.surf()
-        self.withdraw()
+	def run(self):
+		login_response = self.login()
+		sigin_response = self.signin()
+		browser_response = self.browser()
+		withdraw_response = self.withdraw()
+		return login_response, sigin_response, browser_response, withdraw_response
 
 def main():
-    adrobot = Adrobot()
-    adrobot.run()
+	adrobot = Adrobot()
+	adrobot.run()
 
 if __name__ == '__main__':
-    main()
+	main()
