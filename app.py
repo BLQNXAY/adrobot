@@ -113,7 +113,10 @@ class Adrobot:
 			)
 		response = self.session.post(self.browser_url, data=self.data)
 		finish_info = response.json()
-		response = self.session.get(ad.get('url', 'www.baidu.com'))
+		try:
+			response = self.session.get(ad.get('url', 'www.baidu.com'))
+		except:
+			pass
 		time.sleep(ad.get('miao', 20) + 3)
 		return finish_info
 
