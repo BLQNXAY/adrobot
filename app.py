@@ -113,7 +113,8 @@ class Adrobot:
 			)
 		response = self.session.post(self.browser_url, data=self.data)
 		finish_info = response.json()
-		time.sleep(ad.get('miao', 20) + 7)
+		response = self.session.get(ad.get('url', 'www.baidu.com'))
+		time.sleep(ad.get('miao', 20) + 3)
 		return finish_info
 
 	@change_referer()
